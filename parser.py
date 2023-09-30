@@ -23,7 +23,7 @@ def make_request(url, area, page, id_roles_list, date_from, date_to):
 def get_vacancies_list(area, page, id_roles_list, next_date):
     url = 'https://api.hh.ru/vacancies'
     data = make_request(url, area, page, id_roles_list, next_date, date_to)
-    with open(f'../vakansAreas/{area}_{page}_{date_to}.json', 'w') as file:
+    with open(f'data/{area}_{page}_{date_to}.json', 'w') as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
     time.sleep(1)
 
