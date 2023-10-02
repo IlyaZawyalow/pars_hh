@@ -25,27 +25,24 @@ class Warker:
         data = req.content.decode()
         data = json.loads(data)
         req.close()
+        time.sleep(1)
         return data
 
-    def get_time_step(self, date_left, date_right, count):
+    def get_time_step(self, date_left, date_right):
         if date_left < 0:
             date_left = 0
         if date_left == self.date_to - DEFAULT_MAX_STEP_SIZE and date_right == self.date_to:
             data = self.api_req(0, self.comvert_seconds_in_time(date_left), self.comvert_seconds_in_time(date_right))
             if data['found'] < DEFAULT_MAX_REC_RETURNED:
-                print(data['found'])
+                print('Хватает изначально', data['found'])
                 return date_left, data['pages']
 
         mid = (date_right + date_left) / 2
         data = self.api_req(0, self.comvert_seconds_in_time(mid), self.comvert_seconds_in_time(self.date_to))
-        count += 1
         if data['found'] > DEFAULT_MAX_REC_RETURNED:
             print('МНОГО', data['found'], date_right - date_left)
-            return self.get_time_step(mid, date_right, count)
-        elif data['found'] < 1000 and count < 10:
-            print('мало', data['found'], date_right - date_left)
-            return self.get_time_step(date_left, mid, count)
-        logger.info(f'равно = {mid}')
+            return self.get_time_step(mid, date_right)
+        print('Найдено----->>', data['found'])
         return mid, data['pages']
 
 
@@ -58,6 +55,7 @@ class Warker:
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
         self.date_to = self.comvert_time_in_seconds(self.date_to)
         while self.date_to != 0:
-            step, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to, count=0)
+            step, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
             self.date_to = step
+            logger.info(f'{step}')
         logger.info(f'Парсинг id вакансий закончен!')
