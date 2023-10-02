@@ -9,7 +9,7 @@ ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
 DEFAULT_MAX_REC_RETURNED = 2000
 URL = 'https://api.hh.ru/vacancies'
-DEFAULT_MAX_STEP_SIZE = 60 * 60*10
+DEFAULT_MAX_STEP_SIZE = 60 * 60
 class Warker:
     def __init__(self, date_last, date_to):
         self.date_last = date_last
@@ -27,7 +27,9 @@ class Warker:
         req.close()
         return data
 
-    def get_time_step(self, date_left, date_right):
+    def get_time_step(self, date_left, date_right, count):
+        if date_left < 0:
+            date_left = 0
         if date_left == self.date_to - DEFAULT_MAX_STEP_SIZE and date_right == self.date_to:
             data = self.api_req(0, self.comvert_seconds_in_time(date_left), self.comvert_seconds_in_time(date_right))
             if data['found'] < DEFAULT_MAX_REC_RETURNED:
@@ -36,12 +38,13 @@ class Warker:
 
         mid = (date_right + date_left) / 2
         data = self.api_req(0, self.comvert_seconds_in_time(mid), self.comvert_seconds_in_time(self.date_to))
+        count += 1
         if data['found'] > DEFAULT_MAX_REC_RETURNED:
-            logger.info('больше')
-            return self.get_time_step(mid, date_right)
-        elif data['found'] < 1900:
-            logger.info('меньше')
-            return self.get_time_step(date_left, mid)
+            print('МНОГО', data['found'], date_right - date_left)
+            return self.get_time_step(mid, date_right, count)
+        elif data['found'] < 1000 and count < 10:
+            print('мало', data['found'], date_right - date_left)
+            return self.get_time_step(date_left, mid, count)
         logger.info(f'равно = {mid}')
         return mid, data['pages']
 
@@ -49,13 +52,12 @@ class Warker:
     def comvert_time_in_seconds(self, data):
         return (data - self.date_last).days * 24 * 60 * 60
 
-    def comvert_seconds_in_time(self, data):
-        return self.date_last + timedelta(days=data/(24 * 60 * 60))
+    def comvert_seconds_in_time(self, sec):
+        return self.date_last + timedelta(days=sec/(24 * 60 * 60))
     def run(self):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
         self.date_to = self.comvert_time_in_seconds(self.date_to)
         while self.date_to != 0:
-            while self.date_to != self.date_to - DEFAULT_MAX_STEP_SIZE:
-                step, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
-                self.date_to -= step
+            step, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to, count=0)
+            self.date_to = step
         logger.info(f'Парсинг id вакансий закончен!')
