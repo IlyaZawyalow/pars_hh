@@ -10,23 +10,42 @@ ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73",
 DEFAULT_MAX_REC_RETURNED = 2000
 URL = 'https://api.hh.ru/vacancies'
 DEFAULT_MAX_STEP_SIZE = 60 * 60
+DEFAULT_TIME_LIMIT = timedelta(seconds=1)/100
+
 class Warker:
-    def __init__(self, date_last, date_to):
+    def __init__(self, date_last, date_to, count, last_req_time):
         self.date_last = date_last
         self.date_to = date_to
+        self.count = count
 
-    def api_req(self, page, date_from, date_to):
+    def api_req(self, page, date_from, date_to, retry=10):
         params = {
             'per_page': 100,
             'page': page,
             'date_from': f'{date_from.isoformat()}',
             'date_to': f'{date_to.isoformat()}'}
-        req = requests.get(URL, params)
-        data = req.content.decode()
-        data = json.loads(data)
-        req.close()
-        time.sleep(1)
-        return data
+        try:
+            req = requests.get(URL, params)
+            req.raise_for_status()
+        except Exception as err:
+            if retry:
+                time.sleep(3)
+                print('ошибкааааааааааааааааааааааааааааааааааа')
+                return self.api_req(page, date_from, date_to, retry = (retry - 1))
+            else:
+                raise
+        else:
+            data = req.content.decode()
+            data = json.loads(data)
+            self.count +=1
+            if self.count == 10:
+                time.sleep(0.6)
+                self.count = 0
+            return data
+        finally:
+            req.close()
+
+
 
     def get_time_step(self, date_left, date_right):
         if date_left < 0:
