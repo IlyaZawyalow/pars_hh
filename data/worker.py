@@ -1,9 +1,9 @@
 import json
-import os
 import requests
 import time
 from datetime import datetime, timedelta
 from loguru import logger
+
 
 ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73", "155", "96", "164",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
@@ -13,6 +13,8 @@ DEFAULT_MAX_STEP_SIZE = 60 * 60
 
 
 class Warker:
+    ids_set = set()
+
     def __init__(self, date_last, date_to):
         self.date_last = date_last
         self.date_to = date_to
@@ -29,12 +31,16 @@ class Warker:
         except Exception as err:
             if retry:
                 time.sleep(3)
+                logger.info(f'Error 403. retry {retry}')
                 return self.api_req(page, date_from, date_to, retry=(retry - 1))
             else:
                 raise
         else:
             data = req.content.decode()
             data = json.loads(data)
+            if data['items'] == []:
+                data = self.api_req(page, date_from, date_to)
+                print('ПРОБУЮ ЕЩЁ РАЗ')
             return data
         finally:
             req.close()
@@ -42,31 +48,71 @@ class Warker:
     def get_time_step(self, date_left, date_right):
         if date_left < 0:
             date_left = 0
-        if date_left == self.date_to - DEFAULT_MAX_STEP_SIZE and date_right == self.date_to:
-            data = self.api_req(0, self.comvert_seconds_in_time(date_left), self.comvert_seconds_in_time(date_right))
+        if date_left == self.date_to - DEFAULT_MAX_STEP_SIZE and date_right == self.date_to or date_left == 0:
+            data = self.api_req(0, self.convert_seconds_in_date(date_left), self.convert_seconds_in_date(date_right))
             if data['found'] < DEFAULT_MAX_REC_RETURNED:
-                print('Хватает изначально', data['found'])
                 return date_left, data['pages']
 
         mid = (date_right + date_left) / 2
-        data = self.api_req(0, self.comvert_seconds_in_time(mid), self.comvert_seconds_in_time(self.date_to))
+        data = self.api_req(0, self.convert_seconds_in_date(mid), self.convert_seconds_in_date(self.date_to))
         if data['found'] > DEFAULT_MAX_REC_RETURNED:
-            print('МНОГО', data['found'], date_right - date_left)
             return self.get_time_step(mid, date_right)
-        print('Найдено----->>', data['found'])
         return mid, data['pages']
 
-    def comvert_time_in_seconds(self, data):
-        return (data - self.date_last).days * 24 * 60 * 60
+    def convert_date_in_seconds(self, date):
+        return (date - self.date_last).total_seconds()
 
-    def comvert_seconds_in_time(self, sec):
-        return self.date_last + timedelta(days=sec / (24 * 60 * 60))
+    def convert_seconds_in_date(self, seconds):
+        return self.date_last + timedelta(days=seconds / (24 * 60 * 60))
+
+    def add_ids_in_set(self, data):
+        for i in data['items']:
+            self.ids_set.add(i['id'])
+
+
+    def make_req_ids(self, id, retry=10):
+        url = f'{URL}/{id}'
+        try:
+            req = requests.get(url)
+            req.raise_for_status()
+        except Exception as err:
+            if retry:
+                time.sleep(8)
+                logger.info(f'Error 403. retry {retry}')
+                return self.make_req_ids(id, retry=(retry - 1))
+            else:
+                raise
+        else:
+            data = req.content.decode()
+            data = json.loads(data)
+            print('Успешный запрос!')
+            with open(f'../../venv/vakansAreas/{id}.json', 'w') as file:
+                json.dump(data, file, indent=4, ensure_ascii=False)
+            # if data['items'] == []:
+            #     data = self.api_req(page, date_from, date_to)
+            #     print('ПРОБУЮ ЕЩЁ РАЗ')
+            return data
+        finally:
+            req.close()
+            time.sleep(0.25)
 
     def run(self):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
-        self.date_to = self.comvert_time_in_seconds(self.date_to)
+        self.date_to = self.convert_date_in_seconds(self.date_to)
         while self.date_to != 0:
-            step, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
-            self.date_to = step
-            logger.info(f'{step}')
+            next_date, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
+            print(f'Найдены следующая дата {next_date}и кол-во страниц {pages}')
+            for page in range(pages):
+                print(f'Страница номер {page}')
+                data = self.api_req(page, self.convert_seconds_in_date(next_date),
+                                    self.convert_seconds_in_date(self.date_to))
+                self.add_ids_in_set(data)
+            self.date_to = next_date
         logger.info(f'Парсинг id вакансий закончен!')
+
+
+        with open(f'result.txt', 'w') as file:
+            file.write(str(self.ids_set))
+
+        for id in self.ids_set:
+            self.make_req_ids(id)
