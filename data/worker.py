@@ -4,7 +4,6 @@ import time
 from datetime import datetime, timedelta
 from loguru import logger
 
-
 ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73", "155", "96", "164",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
 DEFAULT_MAX_REC_RETURNED = 2000
@@ -69,7 +68,6 @@ class Warker:
         for i in data['items']:
             self.ids_set.add(i['id'])
 
-
     def make_req_ids(self, id, retry=10):
         url = f'{URL}/{id}'
         try:
@@ -77,7 +75,7 @@ class Warker:
             req.raise_for_status()
         except Exception as err:
             if retry:
-                time.sleep(8)
+                time.sleep(20)
                 logger.info(f'Error 403. retry {retry}')
                 return self.make_req_ids(id, retry=(retry - 1))
             else:
@@ -86,11 +84,8 @@ class Warker:
             data = req.content.decode()
             data = json.loads(data)
             print('Успешный запрос!')
-            with open(f'../../venv/vakansAreas/{id}.json', 'w') as file:
+            with open(f'../../venv/vakansAreas/adreses_{id}.json', 'w') as file:
                 json.dump(data, file, indent=4, ensure_ascii=False)
-            # if data['items'] == []:
-            #     data = self.api_req(page, date_from, date_to)
-            #     print('ПРОБУЮ ЕЩЁ РАЗ')
             return data
         finally:
             req.close()
@@ -109,7 +104,6 @@ class Warker:
                 self.add_ids_in_set(data)
             self.date_to = next_date
         logger.info(f'Парсинг id вакансий закончен!')
-
 
         with open(f'result.txt', 'w') as file:
             file.write(str(self.ids_set))
