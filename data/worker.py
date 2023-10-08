@@ -89,12 +89,7 @@ class Warker:
         else:
             data = req.content.decode()
             data = json.loads(data)
-
             print('Запрос успешный')
-            # with open(f'../../venv/vakansAreas/adreses_{id}.json', 'w') as file:
-            #     json.dump(data, file, indent=4, ensure_ascii=False)
-
-
             return data
         finally:
             req.close()
@@ -115,13 +110,9 @@ class Warker:
     async def process_data_from_queue(self):
         while True:
             await self.event.wait()
-
             data = self.queue_a.get()
-
             if data is None:
                 break
-
-
             id = data['id']
             name = data['name']
             print(id, name)
@@ -140,7 +131,7 @@ class Warker:
                 self.event.clear()
 
 
-    def pars_time(self,q):
+    def pars_time(self, q):
         qw = q.get()
         for page in range(qw[2]):
             print(f'Страница номер {page}')
@@ -148,8 +139,7 @@ class Warker:
             self.add_ids_in_set(data)
 
 
-    def inf(self):
-        print(len(self.ids_set))
+
 
     def run(self, q):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
@@ -157,14 +147,14 @@ class Warker:
         while self.date_to != 0:
             next_date, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
             q.put([self.convert_seconds_in_date(self.date_to), self.convert_seconds_in_date(next_date), pages])
-            # print(f'Найдены следующая дата {next_date}и кол-во страниц {pages}')
-            # for page in range(pages):
-            #     print(f'Страница номер {page}')
-            #     data = self.api_req(page, self.convert_seconds_in_date(next_date),
-            #                         self.convert_seconds_in_date(self.date_to))
-            #     self.add_ids_in_set(data)
-
             self.date_to = next_date
+
+    def ggt(self, q):
+        while not q.empty():
+            self.pars_time(q)
+
+        q.put(self.ids_set)
+
 
         # logger.info(f'Парсинг id вакансий закончен!')
         #
