@@ -140,7 +140,16 @@ class Warker:
                 self.event.clear()
 
 
+    def pars_time(self,q):
+        qw = q.get()
+        for page in range(qw[2]):
+            print(f'Страница номер {page}')
+            data = self.api_req(page, qw[1], qw[0])
+            self.add_ids_in_set(data)
 
+
+    def inf(self):
+        print(len(self.ids_set))
 
     def run(self, q):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
@@ -157,10 +166,10 @@ class Warker:
 
             self.date_to = next_date
 
-        logger.info(f'Парсинг id вакансий закончен!')
-
-        with open(f'result.txt', 'w') as file:
-            file.write(str(self.ids_set))
+        # logger.info(f'Парсинг id вакансий закончен!')
+        #
+        # with open(f'result.txt', 'w') as file:
+        #     file.write(str(self.ids_set))
         # print(len(self.ids_set))
 
 
