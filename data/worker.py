@@ -6,6 +6,7 @@ from loguru import logger
 import queue
 import asyncio
 import psycopg2
+import multiprocessing
 
 ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73", "155", "96", "164",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
@@ -17,6 +18,7 @@ DEFAULT_MAX_STEP_SIZE = 60 * 60
 class Warker:
     ids_set = set()
     queue_a = queue.Queue()
+    q = multiprocessing.Queue()
     event = asyncio.Event()
 
     def __init__(self, date_last, date_to):
@@ -146,14 +148,16 @@ class Warker:
         self.date_to = self.convert_date_in_seconds(self.date_to)
         while self.date_to != 0:
             next_date, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
-            print(f'Найдены следующая дата {next_date}и кол-во страниц {pages}')
-            for page in range(pages):
-                print(f'Страница номер {page}')
-                data = self.api_req(page, self.convert_seconds_in_date(next_date),
-                                    self.convert_seconds_in_date(self.date_to))
-                self.add_ids_in_set(data)
-            self.date_to = next_date
+            self.q.put([self.convert_seconds_in_date(self.date_to), self.convert_seconds_in_date(next_date), pages])
+            # print(f'Найдены следующая дата {next_date}и кол-во страниц {pages}')
+            # for page in range(pages):
+            #     print(f'Страница номер {page}')
+            #     data = self.api_req(page, self.convert_seconds_in_date(next_date),
+            #                         self.convert_seconds_in_date(self.date_to))
+            #     self.add_ids_in_set(data)
 
+            self.ids_set.add(pages)
+            self.date_to = next_date
 
         logger.info(f'Парсинг id вакансий закончен!')
 
