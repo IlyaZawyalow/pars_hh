@@ -18,7 +18,6 @@ DEFAULT_MAX_STEP_SIZE = 60 * 60
 class Warker:
     ids_set = set()
     queue_a = queue.Queue()
-    q = multiprocessing.Queue()
     event = asyncio.Event()
 
     def __init__(self, date_last, date_to):
@@ -143,12 +142,12 @@ class Warker:
 
 
 
-    def run(self):
+    def run(self, q):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
         self.date_to = self.convert_date_in_seconds(self.date_to)
         while self.date_to != 0:
             next_date, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
-            self.q.put([self.convert_seconds_in_date(self.date_to), self.convert_seconds_in_date(next_date), pages])
+            q.put([self.convert_seconds_in_date(self.date_to), self.convert_seconds_in_date(next_date), pages])
             # print(f'Найдены следующая дата {next_date}и кол-во страниц {pages}')
             # for page in range(pages):
             #     print(f'Страница номер {page}')
@@ -156,7 +155,6 @@ class Warker:
             #                         self.convert_seconds_in_date(self.date_to))
             #     self.add_ids_in_set(data)
 
-            self.ids_set.add(pages)
             self.date_to = next_date
 
         logger.info(f'Парсинг id вакансий закончен!')
