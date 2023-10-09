@@ -15,14 +15,15 @@ URL = 'https://api.hh.ru/vacancies'
 DEFAULT_MAX_STEP_SIZE = 60 * 60
 
 
-class Warker:
-    ids_set = set()
+class Worker:
+
     queue_a = queue.Queue()
     event = asyncio.Event()
 
     def __init__(self, date_last, date_to):
         self.date_last = date_last
         self.date_to = date_to
+        self.ids_set = set()
 
     def api_req(self, page, date_from, date_to, retry=10):
         params = {
@@ -141,19 +142,22 @@ class Warker:
 
 
 
-    def run(self, q):
+    def run(self, q,q2):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
         self.date_to = self.convert_date_in_seconds(self.date_to)
         while self.date_to != 0:
             next_date, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
             q.put([self.convert_seconds_in_date(self.date_to), self.convert_seconds_in_date(next_date), pages])
             self.date_to = next_date
+        self.pars_time(q)
+        q2.put(self.ids_set)
 
-    def ggt(self, q):
-        while not q.empty():
-            self.pars_time(q)
 
-        q.put(self.ids_set)
+    # def ggt(self, q):
+    #     while not q.empty():
+    #         self.pars_time(q)
+    #
+    #     q.put(self.ids_set)
 
 
         # logger.info(f'Парсинг id вакансий закончен!')
