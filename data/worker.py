@@ -7,63 +7,101 @@ import queue
 import asyncio
 import psycopg2
 import multiprocessing
+from psycopg2 import IntegrityError
+from fake_useragent import UserAgent
+import random
 
+#
 ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73", "155", "96", "164",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
 DEFAULT_MAX_REC_RETURNED = 2000
 URL = 'https://api.hh.ru/vacancies'
-DEFAULT_MAX_STEP_SIZE = 60 * 60
+DEFAULT_MAX_STEP_SIZE = 60 * 30
+DEFAULT_MIN_STEP_SIZE = 300
+PROXIES_LIST = [None, {'http': '149.126.221.237:50100', 'https': '149.126.221.237:50100'},
+                {'http': '149.126.221.253:50100', 'https': '149.126.221.253:50100'},
+                {'http': '149.126.220.77:50100', 'https': '149.126.220.77:50100'},
+                {'http': '149.126.223.63:50100', 'https': '149.126.223.63:50100'},
+                {'http': '94.137.78.93:50100', 'https': '94.137.78.93:50100'},
+                {'http': '46.3.133.17:50100', 'https': '46.3.133.17:50100'}]
 
 
 class Worker:
 
     queue_a = queue.Queue()
-    event = asyncio.Event()
+    ua = UserAgent()
 
     def __init__(self, date_last, date_to):
         self.date_last = date_last
         self.date_to = date_to
         self.ids_set = set()
+        self.proxy = random.choice(PROXIES_LIST)
+        self.roles = None
+        self.count = 0
+        self.count_errors = 0
+        self.headers = {"User-Agent": self.ua.random}
 
-    def api_req(self, page, date_from, date_to, retry=10):
+
+    def api_req(self, page, date_from, date_to,retry=5):
         params = {
             'per_page': 100,
             'page': page,
+            'professional_role': self.roles,
             'date_from': f'{date_from.isoformat()}',
             'date_to': f'{date_to.isoformat()}'}
+        req = None
         try:
-            req = requests.get(URL, params)
+            req = requests.get(URL, params, proxies=self.proxy, headers=self.headers, timeout=5)
             req.raise_for_status()
+
+        except requests.exceptions.ConnectionError as e:
+            logger.info(f'{e}!!!!!!! retry {retry} proxy {self.proxy}')
+            time.sleep(15)
+            self.proxy = random.choice(PROXIES_LIST)
+            return self.api_req(page, date_from, date_to)
         except Exception as err:
+
+            time.sleep(4)
             if retry:
-                time.sleep(3)
-                logger.info(f'Error 403. retry {retry}')
+                logger.info(f'{err}. retry {retry} proxy {self.proxy}')
                 return self.api_req(page, date_from, date_to, retry=(retry - 1))
             else:
-                raise
+                self.proxy = random.choice(PROXIES_LIST)
+                return self.api_req(page, date_from, date_to)
         else:
+
+            self.count += 1
             data = req.content.decode()
             data = json.loads(data)
             if data['items'] == []:
+                time.sleep(1)
                 data = self.api_req(page, date_from, date_to)
                 print('ПРОБУЮ ЕЩЁ РАЗ')
             return data
         finally:
-            req.close()
+            if req != None:
+                req.close()
+                if self.count >= 10:
+                    time.sleep(1)
+                    self.count = 0
 
     def get_time_step(self, date_left, date_right):
         if date_left < 0:
             date_left = 0
-        if date_left == self.date_to - DEFAULT_MAX_STEP_SIZE and date_right == self.date_to or date_left == 0:
-            data = self.api_req(0, self.convert_seconds_in_date(date_left), self.convert_seconds_in_date(date_right))
-            if data['found'] < DEFAULT_MAX_REC_RETURNED:
-                return date_left, data['pages']
+        data = self.api_req(0, self.convert_seconds_in_date(date_left), self.convert_seconds_in_date(date_right))
+        if data['found'] < DEFAULT_MAX_REC_RETURNED:
+            print('Хватает')
+            self.queue_a.put(
+                [self.convert_seconds_in_date(date_left), self.convert_seconds_in_date(date_right)])
+        else:
+            print('много')
+            while date_right != date_left:
+                self.queue_a.put([self.convert_seconds_in_date(date_right - DEFAULT_MIN_STEP_SIZE),
+                                  self.convert_seconds_in_date(date_right)])
+                date_right -= DEFAULT_MIN_STEP_SIZE
+        return date_left
 
-        mid = (date_right + date_left) / 2
-        data = self.api_req(0, self.convert_seconds_in_date(mid), self.convert_seconds_in_date(self.date_to))
-        if data['found'] > DEFAULT_MAX_REC_RETURNED:
-            return self.get_time_step(mid, date_right)
-        return mid, data['pages']
+
 
     def convert_date_in_seconds(self, date):
         return (date - self.date_last).total_seconds()
@@ -75,45 +113,50 @@ class Worker:
         for i in data['items']:
             self.ids_set.add(i['id'])
 
-    def make_req_ids(self, id, retry=10):
+    def make_req_ids(self, id, retry=5):
         url = f'{URL}/{id}'
+        req = None
         try:
-            req = requests.get(url)
+            req = requests.get(url, proxies=self.proxy, headers=self.headers, timeout=5)
             req.raise_for_status()
+        except requests.exceptions.ConnectionError as e:
+            logger.info(f'{e}!!!!!!! retry {retry} proxy {self.proxy}')
+
+            time.sleep(20)
+            self.proxy = random.choice(PROXIES_LIST)
+            return self.make_req_ids(id)
         except Exception as err:
+            self.count_errors += 1
+            if self.count_errors > 5:
+                self.count_errors = 0
+                return None
+
+            time.sleep(self.count_errors * 2)
             if retry:
                 time.sleep(20)
-                logger.info(f'Error 403. retry {retry}')
+                logger.info(f'{err}. retry {retry} proxy {self.proxy}')
                 return self.make_req_ids(id, retry=(retry - 1))
             else:
-                raise
+                self.proxy = random.choice(PROXIES_LIST)
+                return self.make_req_ids(id)
         else:
+            self.count_errors = 0
+            self.count += 1
             data = req.content.decode()
             data = json.loads(data)
             print('Запрос успешный')
             return data
         finally:
-            req.close()
-            # time.sleep(0.25)
+            if req != None:
+                req.close()
+                if self.count >= 10:
+                    time.sleep(1)
+                    self.count = 0
 
-    async def add_in_queue(self):
-        for id in self.ids_set:
-            # Отправляем запрос и добавляем данные в очередь
-            self.queue_a.put(self.make_req_ids(id))
-            #Говорим, что появилсь новые данные
-            self.event.set()
-            await asyncio.sleep(0.1)
+    def process_data_from_queue(self, q):
+        while not q.empty():
+            data = q.get()
 
-        self.queue_a.put(None)
-        self.event.set()
-
-
-    async def process_data_from_queue(self):
-        while True:
-            await self.event.wait()
-            data = self.queue_a.get()
-            if data is None:
-                break
             id = data['id']
             name = data['name']
             print(id, name)
@@ -124,57 +167,38 @@ class Worker:
                 sql = '''INSERT INTO vac_ids (id_vac, discr) VALUES (%s, %s)'''
                 cur.execute(sql, (id, name))
                 conn.commit()
+            except IntegrityError:
+                print(f'Дубликат элемента {id}')
             except Exception as err:
                 print(err)
             finally:
                 cur.close()
                 conn.close()
-                self.event.clear()
 
 
-    def pars_time(self, q):
-        qw = q.get()
-        for page in range(qw[2]):
-            print(f'Страница номер {page}')
-            data = self.api_req(page, qw[1], qw[0])
-            self.add_ids_in_set(data)
-
-
-
-
-    def run(self, q,q2):
+    def run(self, q):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
         self.date_to = self.convert_date_in_seconds(self.date_to)
         while self.date_to != 0:
-            next_date, pages = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
-            q.put([self.convert_seconds_in_date(self.date_to), self.convert_seconds_in_date(next_date), pages])
+            next_date = self.get_time_step(self.date_to - DEFAULT_MAX_STEP_SIZE, self.date_to)
+            print(self.date_to)
             self.date_to = next_date
-        self.pars_time(q)
-        q2.put(self.ids_set)
 
+        logger.info('процесс начал парсить ids')
 
-    # def ggt(self, q):
-    #     while not q.empty():
-    #         self.pars_time(q)
-    #
-    #     q.put(self.ids_set)
+        while not self.queue_a.empty():
+            date_step = self.queue_a.get()
+            for page in range(20):
+                data = self.api_req(page, date_step[0], date_step[1])
+                if (data['pages'] - page) <= 1:
+                    break
+                self.add_ids_in_set(data)
 
-
-        # logger.info(f'Парсинг id вакансий закончен!')
-        #
-        # with open(f'result.txt', 'w') as file:
-        #     file.write(str(self.ids_set))
-        # print(len(self.ids_set))
-
-
-        # Добавляем данные в очередь
-        # for id in self.ids_set:
-        #     self.queue_a.put(self.make_req_ids(id))
-
-        # Добавляю в базу данных
-        # self.process_data_from_queue()
-
-
-        #
-        # while not self.queue_a.empty():
-        #     print(self.queue_a.get())
+        logger.info('процесс закончил парсить ids')
+        print(self.ids_set)
+        for id in self.ids_set:
+            data = self.make_req_ids(id)
+            if data == None:
+                continue
+            q.put(data)
+        logger.info('процесс закончил свою работу')
