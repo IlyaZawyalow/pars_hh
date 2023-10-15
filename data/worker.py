@@ -9,6 +9,7 @@ from psycopg2 import IntegrityError
 from fake_useragent import UserAgent
 import random
 
+
 #
 ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73", "155", "96", "164",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
@@ -27,6 +28,7 @@ PROXIES_LIST = [None, {'http': '149.126.221.237:50100', 'https': '149.126.221.23
 class Worker:
 
     queue_a = queue.Queue()
+    queue_b = queue.Queue()
     ua = UserAgent()
 
     def __init__(self, date_last, date_to):
@@ -141,25 +143,23 @@ class Worker:
             self.count_errors = 0
             self.count += 1
             data = req.content.decode()
-            # data = json.loads(data)
-            # with open(f'../../venv/vakansAreas/{id}.json', 'w') as file:
-            #     json.dump(data, file, indent=4, ensure_ascii=False)
-            print('Запрос успешный')
+            print(f'Запрос успешный {self.count}')
             return data
         finally:
             if req != None:
                 req.close()
-                if self.count >= 10:
+                if self.count % 10 == 0:
                     time.sleep(1)
-                    self.count = 0
+                    # self.count = 0
 
-    def process_data_from_queue(self, q):
+    def process_data_from_queue(self):
             try:
                 conn = psycopg2.connect(database='HeadHunter', user='postgres', host='localhost', port='5432',
                                         password='2280')
                 cur = conn.cursor()
-                while not q.empty():
-                    data = q.get()
+                while not self.queue_b.empty():
+                    data = self.queue_b.get()
+                    print('добавил элемент')
 
                     vacancies_id = json.loads(data)['id']
 
@@ -176,9 +176,10 @@ class Worker:
             finally:
                 cur.close()
                 conn.close()
+                logger.info('Закончил добавлять в базу____!')
 
 
-    def run(self, q):
+    def run(self):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
         self.date_to = self.convert_date_in_seconds(self.date_to)
         while self.date_to != 0:
@@ -202,5 +203,10 @@ class Worker:
             data = self.make_req_ids(id)
             if data == None:
                 continue
-            q.put(data)
+            self.queue_b.put(data)
+            if self.count == 1000:
+                logger.info('Добавляю в базу')
+                self.process_data_from_queue()
+                self.count =0
+
         logger.info('процесс закончил свою работу')

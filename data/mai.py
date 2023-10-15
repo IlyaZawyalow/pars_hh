@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 import multiprocessing
 
 
-def worker_func(q, time):
+def worker_func(time):
     pr = worker.Worker(*time)
-    pr.run(q)
+    pr.run()
 
 def get_date(proc_count, timedelta_in_seconds):
     list_time = []
@@ -19,19 +19,19 @@ def get_date(proc_count, timedelta_in_seconds):
 
 if __name__ == '__main__':
     t0 = time.time()
-    manager = multiprocessing.Manager()
-    q = manager.Queue()
+    # manager = multiprocessing.Manager()
+    # q = manager.Queue()
     pool = multiprocessing.Pool()
 
-    list_time = get_date(4, 600)
-    task_arge = [(q, t) for t in list_time]
+    list_time = get_date(6, 1500)
+    task_arge = [(t,) for t in list_time]
 
     pool.starmap(worker_func, task_arge)
     pool.close()
     pool.join()
 
-    pr = worker.Worker(1, 2)
-    pr.process_data_from_queue(q)
+    # pr = worker.Worker(1, 2)
+    # pr.process_data_from_queue(q)
     print(time.time()-t0)
 
 
