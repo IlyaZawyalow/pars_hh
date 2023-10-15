@@ -9,7 +9,6 @@ from psycopg2 import IntegrityError
 from fake_useragent import UserAgent
 import random
 
-
 #
 ID_ROLES_LIST = ["156", "160", "10", "12", "150", "25", "165", "34", "36", "73", "155", "96", "164",
                  "104", "157", "107", "112", "113", "148", "114", "116", "121", "124", "125", "126"]
@@ -22,11 +21,16 @@ PROXIES_LIST = [None, {'http': '149.126.221.237:50100', 'https': '149.126.221.23
                 {'http': '149.126.220.77:50100', 'https': '149.126.220.77:50100'},
                 {'http': '149.126.223.63:50100', 'https': '149.126.223.63:50100'},
                 {'http': '94.137.78.93:50100', 'https': '94.137.78.93:50100'},
-                {'http': '46.3.133.17:50100', 'https': '46.3.133.17:50100'}]
+                {'http': '46.3.133.17:50100', 'https': '46.3.133.17:50100'},
+                {'http': '149.126.219.47:50100', 'https': '149.126.219.47:50100'},
+                {'http': '46.3.133.66:50100', 'https': '46.3.133.66:50100'},
+                {'http': '94.137.90.43:50100', 'https': '94.137.90.43:50100'},
+                {'http': '194.110.14.19:50100', 'https': '194.110.14.19:50100'},
+                {'http': '45.95.67.6:50100', 'https': '45.95.67.6:50100'},
+                {'http': '212.8.229.137:50100', 'https': '212.8.229.137:50100'}]
 
 
 class Worker:
-
     queue_a = queue.Queue()
     queue_b = queue.Queue()
     ua = UserAgent()
@@ -41,8 +45,7 @@ class Worker:
         self.count_errors = 0
         self.headers = {"User-Agent": self.ua.random}
 
-
-    def api_req(self, page, date_from, date_to,retry=5):
+    def api_req(self, page, date_from, date_to, retry=5):
         params = {
             'per_page': 100,
             'page': page,
@@ -101,8 +104,6 @@ class Worker:
                 date_right -= DEFAULT_MIN_STEP_SIZE
         return date_left
 
-
-
     def convert_date_in_seconds(self, date):
         return (date - self.date_last).total_seconds()
 
@@ -153,31 +154,30 @@ class Worker:
                     # self.count = 0
 
     def process_data_from_queue(self):
-            try:
-                conn = psycopg2.connect(database='HeadHunter', user='postgres', host='localhost', port='5432',
-                                        password='2280')
-                cur = conn.cursor()
-                while not self.queue_b.empty():
-                    data = self.queue_b.get()
-                    print('добавил элемент')
+        try:
+            conn = psycopg2.connect(database='HeadHunter', user='postgres', host='localhost', port='5432',
+                                    password='2280')
+            cur = conn.cursor()
+            while not self.queue_b.empty():
+                data = self.queue_b.get()
 
-                    vacancies_id = json.loads(data)['id']
 
-                    sql = '''INSERT INTO vacancies (vacancies_id, data_jsonb) VALUES (%s, %s)'''
-                    try:
-                        cur.execute(sql, (vacancies_id, str(data)))
-                        conn.commit()
-                    except IntegrityError:
-                        conn.rollback()
-                        print(f'Дубликат элемента {vacancies_id}')
+                vacancies_id = json.loads(data)['id']
 
-            except Exception as err:
-                print(err)
-            finally:
-                cur.close()
-                conn.close()
-                logger.info('Закончил добавлять в базу____!')
+                sql = '''INSERT INTO vacancies (vacancies_id, data_jsonb) VALUES (%s, %s)'''
+                try:
+                    cur.execute(sql, (vacancies_id, str(data)))
+                    conn.commit()
+                except IntegrityError:
+                    conn.rollback()
+                    print(f'Дубликат элемента {vacancies_id}')
 
+        except Exception as err:
+            print(err)
+        finally:
+            cur.close()
+            conn.close()
+            logger.info('Закончил добавлять в базу____!')
 
     def run(self):
         logger.info(f'Запуск парсера. Временной интервал: От {self.date_to} --> до --> {self.date_last}')
@@ -204,9 +204,9 @@ class Worker:
             if data == None:
                 continue
             self.queue_b.put(data)
-            if self.count == 1000:
+            if self.count == 100:
                 logger.info('Добавляю в базу')
                 self.process_data_from_queue()
-                self.count =0
-
+                self.count = 0
+        self.process_data_from_queue()
         logger.info('процесс закончил свою работу')
