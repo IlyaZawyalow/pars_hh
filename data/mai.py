@@ -23,7 +23,7 @@ if __name__ == '__main__':
     q = manager.Queue()
     pool = multiprocessing.Pool()
 
-    list_time = get_date(6, 2500)
+    list_time = get_date(4, 600)
     task_arge = [(q, t) for t in list_time]
 
     pool.starmap(worker_func, task_arge)

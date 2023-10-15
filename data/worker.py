@@ -4,9 +4,7 @@ import time
 from datetime import datetime, timedelta
 from loguru import logger
 import queue
-import asyncio
 import psycopg2
-import multiprocessing
 from psycopg2 import IntegrityError
 from fake_useragent import UserAgent
 import random
@@ -143,7 +141,9 @@ class Worker:
             self.count_errors = 0
             self.count += 1
             data = req.content.decode()
-            data = json.loads(data)
+            # data = json.loads(data)
+            # with open(f'../../venv/vakansAreas/{id}.json', 'w') as file:
+            #     json.dump(data, file, indent=4, ensure_ascii=False)
             print('Запрос успешный')
             return data
         finally:
@@ -154,21 +154,23 @@ class Worker:
                     self.count = 0
 
     def process_data_from_queue(self, q):
-        while not q.empty():
-            data = q.get()
-
-            id = data['id']
-            name = data['name']
-            print(id, name)
             try:
-                conn = psycopg2.connect(database='test_pars', user='postgres', host='localhost', port='5432',
+                conn = psycopg2.connect(database='HeadHunter', user='postgres', host='localhost', port='5432',
                                         password='2280')
                 cur = conn.cursor()
-                sql = '''INSERT INTO vac_ids (id_vac, discr) VALUES (%s, %s)'''
-                cur.execute(sql, (id, name))
-                conn.commit()
-            except IntegrityError:
-                print(f'Дубликат элемента {id}')
+                while not q.empty():
+                    data = q.get()
+
+                    vacancies_id = json.loads(data)['id']
+
+                    sql = '''INSERT INTO vacancies (vacancies_id, data_jsonb) VALUES (%s, %s)'''
+                    try:
+                        cur.execute(sql, (vacancies_id, str(data)))
+                        conn.commit()
+                    except IntegrityError:
+                        conn.rollback()
+                        print(f'Дубликат элемента {vacancies_id}')
+
             except Exception as err:
                 print(err)
             finally:
