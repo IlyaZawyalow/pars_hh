@@ -19,7 +19,9 @@ DEFAULT_MAX_STEP_SIZE = 60 * 30
 DEFAULT_MIN_STEP_SIZE = 300
 
 
+
 class Worker:
+
     queue_a = queue.Queue()
     queue_b = queue.Queue()
     ua = UserAgent()

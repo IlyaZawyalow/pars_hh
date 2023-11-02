@@ -10,7 +10,6 @@ def worker_func(q, time):
     pr = worker.Worker(q, *time)
     pr.run(q)
 
-
 def get_date(proc_count, timedelta_in_seconds):
     list_time = []
     now = datetime.now()
